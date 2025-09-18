@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Login</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;background:#111;color:#eee}
+    form{background:#1e1e1e;padding:24px;border-radius:12px;min-width:300px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+    h1{margin:0 0 16px;font-size:18px}
+    label{display:block;margin:10px 0 4px}
+    input{width:100%;padding:10px;border-radius:8px;border:1px solid #333;background:#0f0f0f;color:#fff}
+    button{margin-top:14px;width:100%;padding:10px;border:0;border-radius:8px;background:#4f46e5;color:#fff;font-weight:600;cursor:pointer}
+    .msg{margin-top:10px;color:#f99;min-height:18px}
+    .links{margin-top:12px;font-size:13px;text-align:center}
+    a{color:#9cf}
+  </style>
+</head>
+<body>
+  <form id="f">
+    <h1>Entrar</h1>
+    <label for="u">Usuário</label>
+    <input id="u" name="u" autocomplete="username" required />
+
+    <label for="p">Senha</label>
+    <input id="p" name="p" type="password" autocomplete="current-password" required />
+
+    <button type="submit">Acessar</button>
+    <div class="msg" id="m"></div>
+    <div class="links">
+      <a href="/index.html">Voltar ao site</a>
+    </div>
+  </form>
+
+  <script>
+ const f = document.getElementById('f');
+  const m = document.getElementById('m');
+
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    m.textContent = '';
+    const username = document.getElementById('u').value.trim();
+    const password = document.getElementById('p').value;
+
+    try {
+      const r = await fetch('/api/auth/login', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials: 'include',               // 👉 ADICIONE ISTO
+        body: JSON.stringify({ username, password })
+      });
+
+      // trate não-JSON também, para mensagens de erro do servidor
+      const txt = await r.text();
+      let j; try { j = JSON.parse(txt); } catch { j = null; }
+
+      if(!r.ok || !j?.ok){
+        m.textContent = (j && j.error) ? j.error : `Falha no login (HTTP ${r.status})`;
+        return;
+      }
+
+      const params = new URLSearchParams(location.search);
+      const back = params.get('back') || '/admin.html';
+      location.href = back;
+    } catch (err) {
+      m.textContent = 'Erro de rede';
+    }
+  });
+  </script>
+</body>
+</html>

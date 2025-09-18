@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <title>Esfihas</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin:1rem; padding-bottom:120px; }
+
+    /* lista em 2 colunas no desktop e 1 no mobile */
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    @media(max-width:700px){ .grid { grid-template-columns: 1fr; } }
+
+    /* CARD: imagem à esquerda, conteúdo à direita */
+    .card {
+      border:1px solid #ddd; border-radius:10px; padding:0.85rem; background:#fff;
+      display:grid; grid-template-columns: 110px 1fr; gap:.85rem; align-items:center;
+    }
+    /* em telas bem pequenas, reduz a coluna da imagem */
+    @media(max-width:380px){
+      .card { grid-template-columns: 96px 1fr; }
+    }
+
+    .card-img {
+      width: 100%;
+      aspect-ratio: 1 / 1;        /* quadrado, evita cortes estranhos */
+      object-fit: contain;         /* mostra a esfiha inteira */
+      border-radius: 8px;
+      background:#f7f7f7;          /* fundo leve caso a imagem tenha transparência */
+      display:block;
+    }
+
+    .card-body { display:flex; flex-direction:column; gap:.35rem; min-width:0; }
+    .card-title { margin:0; font-size:1rem; line-height:1.2; word-break:break-word; }
+    .card-price { margin:0; color:#333; font-weight:bold; }
+
+    .row { display:flex; gap:.5rem; align-items:center; }
+    .footer { position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid #ddd; padding:1rem; display:flex; justify-content:space-between; align-items:center; }
+    .btn { padding:.5rem .9rem; border:1px solid #333; border-radius:8px; background:#fff; cursor:pointer; transition: transform .08s ease; position: relative; overflow: hidden; }
+    .btn:active { transform: scale(0.95); }
+    .btn.pop { animation: pop .2s ease; }
+    .btn, button {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      user-select: none; 
+    }
+    @keyframes pop { 0%{ transform: scale(1);} 50%{ transform: scale(1.06);} 100%{ transform: scale(1);} }
+    .r { animation: ripple .35s ease-out; }
+    @keyframes ripple { from{ box-shadow:0 0 0 0 rgba(0,0,0,.15);} to{ box-shadow:0 0 0 14px rgba(0,0,0,0);} }
+
+    .qty { min-width: 28px; text-align:center; font-weight:bold; }
+  </style>
+  <script src="js/helpers.js?v=9"></script>
+</head>
+<body>
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+    <button class="btn" onclick="Nav.go('index.html')">← Início</button>
+    <h2>Esfihas</h2>
+    <div></div>
+  </div>
+
+  <div id="list" class="grid"></div>
+
+  <div class="footer">
+    <div><strong>Subtotal:</strong> R$ <span id="subtotal">0,00</span></div>
+    <button class="btn" onclick="Nav.go('checkout.html')">Finalizar Pedido</button>
+  </div>
+
+<script>
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', function (e) {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+      e.preventDefault(); // impede o zoom por double-tap
+    }
+    lastTouchEnd = now;
+  }, { passive: false });
+
+  const CATEGORY_NAME = 'Esfihas';
+  let items = [];
+
+  /* evita estado antigo ao voltar do histórico */
+  window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
+
+  /* helpers UI */
+  function animateBtn(btn){
+    if(!btn) return;
+    btn.classList.add('pop'); btn.classList.add('r');
+    setTimeout(()=>{ btn.classList.remove('pop'); btn.classList.remove('r'); }, 220);
+  }
+  function slugify(s){
+    return String(s||'')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+  }
+
+  /* junta com a origem do backend (API_BASE) */
+  function apiBaseJoin(p){
+    const base = (window.API_BASE || '/').replace(/\/$/, '');
+    if (/^https?:\/\//i.test(p)) {
+      // se for URL absoluta e tiver /uploads/ ou /images/, força same-origin (remove host antigo)
+      try {
+        const u = new URL(p);
+        if (u.pathname.startsWith('/uploads/') || u.pathname.startsWith('/images/')) {
+          return base + u.pathname;
+        }
+      } catch {}
+      return p; // cdn externa etc.
+    }
+    return base + (p.startsWith('/') ? p : '/' + p);
+  }
+
+  /* resolve URL(s) de imagem – prioriza BLOB (/images/:id); mantém fallback para /uploads */
+  function resolveImageUrl(item){
+    const raw = String(item.image_url || '').trim();
+    if (raw) {
+      // URL absoluta
+      if (/^https?:\/\//i.test(raw)) {
+        try {
+          const u = new URL(raw);
+          if (u.pathname.startsWith('/images/') || u.pathname.startsWith('/uploads/')) {
+            return apiBaseJoin(u.pathname);
+          }
+        } catch {}
+        return raw;
+      }
+      // caminhos relativos conhecidos
+      if (raw.startsWith('/images/'))  return apiBaseJoin(raw);     // novo (BLOB)
+      if (raw.startsWith('images/'))   return apiBaseJoin('/' + raw);
+      if (raw.startsWith('/uploads/')) return apiBaseJoin(raw);     // legado
+      if (raw.startsWith('uploads/'))  return apiBaseJoin('/' + raw);
+      // qualquer outra coisa, trate como caminho relativo no servidor
+      return apiBaseJoin('/' + raw.replace(/^\/+/, ''));
+    }
+
+    // Fallback: tenta por nome no uploads (compat legada)
+    const slug = slugify(item.name || '');
+    if (!slug) return '';
+    const exts = ['jpg','jpeg','png','JPG','JPEG','PNG'];
+    return exts.map(ext => apiBaseJoin('/uploads/' + slug + '.' + ext));
+  }
+
+  /* carrega imagem com fallback (lista ou única) */
+  function loadImgWithFallback(imgEl, candidates){
+    if (!Array.isArray(candidates)) {
+      if (!candidates) { imgEl.style.display = 'none'; return; }
+      imgEl.onload  = () => { imgEl.style.display = 'block'; };
+      imgEl.onerror = () => { imgEl.style.display = 'none'; };
+      imgEl.src = candidates;
+      return;
+    }
+    let i = 0;
+    const tryNext = () => {
+      if (i >= candidates.length) { imgEl.style.display = 'none'; return; }
+      imgEl.onload  = () => { imgEl.style.display = 'block'; };
+      imgEl.onerror = () => { i++; tryNext(); };
+      imgEl.src = candidates[i];
+    };
+    tryNext();
+  }
+
+  /* limpa do carrinho todos os itens desta categoria ao abrir a página */
+  function clearCategoryFromCart(categoryItems){
+    const names = new Set((categoryItems || []).map(i => String(i.name || '')));
+    const cur = Cart.load();
+    const kept = cur.filter(i => !names.has(i.name));
+    if (kept.length !== cur.length) Cart.save(kept);
+  }
+
+  /* carrega itens da API */
+  async function load(){
+    const listEl = document.getElementById('list');
+    listEl.textContent = 'Carregando...';
+    try{
+      let data = await apiFetchJSON('/api/menu?category=' + encodeURIComponent(CATEGORY_NAME));
+      if (!Array.isArray(data) || data.length === 0){
+        const all = await apiFetchJSON('/api/menu');
+        data = Array.isArray(all)
+          ? all.filter(it => String(it.category||'').trim().toLowerCase() === CATEGORY_NAME.toLowerCase())
+          : [];
+      }
+
+      clearCategoryFromCart(data); // zera quantidades desta categoria
+
+      // 🔽 Ordena alfabeticamente (ignorando acentos)
+      items = (data || []).slice().sort((a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''), 'pt', { sensitivity: 'base' })
+      );
+
+      render();
+      updateSubtotal(); // subtotal desta página começa 0,00
+
+      if (items.length === 0){
+        listEl.innerHTML = '<em>Nenhum item de Esfihas cadastrado.</em>';
+      }
+    } catch(e){
+      document.getElementById('list').innerHTML = '<em style="color:#b00;">Erro ao carregar itens.</em>';
+      console.error(e);
+    }
+  }
+
+  /* carrinho */
+  function getQtyByName(name){
+    const cur = Cart.load();
+    const it = cur.find(i => i.name === name);
+    return it ? Number(it.qty) : 0;
+  }
+  function refreshQty(slug, name){
+    const el = document.getElementById('q-' + slug);
+    if (el) el.textContent = getQtyByName(name);
+  }
+
+  /* subtotal apenas dos itens desta página */
+  function subtotalForThisPage(){
+    const names = new Set(items.map(i => String(i.name || '')));
+    return Cart.load()
+      .filter(i => names.has(i.name))
+      .reduce((acc, i) => acc + Number(i.price)*Number(i.qty), 0);
+  }
+
+  /* render com imagem à esquerda e conteúdo à direita */
+  function render(){
+    const el = document.getElementById('list');
+    el.innerHTML = '';
+    items.forEach(it => {
+      const name = String(it.name || '');
+      const slug = slugify(name);
+      const priceNum = Number(it.price || 0);
+      const imgCandidates = resolveImageUrl(it);
+
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      // coluna esquerda: imagem
+      const imgEl = document.createElement('img');
+      imgEl.className = 'card-img';
+      imgEl.alt = name;
+      imgEl.style.display = 'none';
+      card.appendChild(imgEl);
+      loadImgWithFallback(imgEl, imgCandidates);
+
+      // coluna direita: corpo (título, preço, controles)
+      const body = document.createElement('div');
+      body.className = 'card-body';
+
+      const h3 = document.createElement('h3');
+      h3.className = 'card-title';
+      h3.textContent = name;
+
+      const p  = document.createElement('p');
+      p.className = 'card-price';
+      p.textContent = 'R$ ' + priceNum.toFixed(2);
+
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `
+        <button class="btn" onclick="decItem('${slug}','${name.replace(/'/g,"\\'")}', ${priceNum}, this)">-</button>
+        <span class="qty" id="q-${slug}">0</span>
+        <button class="btn" onclick="incItem('${slug}','${name.replace(/'/g,"\\'")}', ${priceNum}, this)">+</button>
+      `;
+
+      body.appendChild(h3);
+      body.appendChild(p);
+      body.appendChild(row);
+
+      card.appendChild(body);
+      el.appendChild(card);
+    });
+  }
+
+  /* + / - */
+  function incItem(slug, name, price, btn){
+    Cart.add({name, price, qty:1});
+    animateBtn(btn);
+    refreshQty(slug, name);
+    updateSubtotal();
+  }
+  function decItem(slug, name, price, btn){
+    const cur = Cart.load();
+    const idx = cur.findIndex(i => i.name === name);
+    if (idx >= 0) {
+      cur[idx].qty -= 1;
+      if (cur[idx].qty <= 0) cur.splice(idx,1);
+      Cart.save(cur);
+    }
+    animateBtn(btn);
+    refreshQty(slug, name);
+    updateSubtotal();
+  }
+
+  /* atualiza subtotal (0,00 ao carregar) */
+  function updateSubtotal(){
+    const v = subtotalForThisPage();
+    document.getElementById('subtotal').innerText = v.toFixed(2);
+  }
+
+  /* init quando helpers já carregou */
+  document.addEventListener('DOMContentLoaded', load);
+</script>
+</body>
+</html>

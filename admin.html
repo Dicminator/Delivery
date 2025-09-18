@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin • Manutenção de Itens</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin:1rem; }
+    .bar { display:flex; gap:.5rem; margin-bottom:1rem; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+    .btn { padding:.5rem 1rem; border:1px solid #333; border-radius:8px; background:#fff; cursor:pointer; transition:transform .08s ease; }
+    .btn:active { transform: scale(0.98); }
+    .btn[disabled] { opacity:.6; cursor:not-allowed; }
+    .btn--danger { border-color:#b00; color:#b00; }
+    input, select { width:100%; padding:.35rem; }
+    .muted { color:#666; font-size:.9em; }
+    .card { border:1px solid #ddd; border-radius:8px; padding:1rem; margin:1rem 0; background:#fafafa; }
+    .grid { display:grid; grid-template-columns: 60px 2fr 120px 160px 200px 200px; gap:.5rem; align-items:center; }
+    .grid.head { font-weight:bold; border-bottom:2px solid #333; padding-bottom:.5rem; }
+    .row { border-bottom:1px solid #eee; padding:.5rem 0; }
+    .grid2 { display:grid; grid-template-columns: 60px 2fr 140px 160px; gap:.5rem; align-items:center; }
+    .grid2.head { font-weight:bold; border-bottom:2px solid #333; padding-bottom:.5rem; }
+    img.thumb { height:40px; border:1px solid #ddd; padding:2px; background:#fff; border-radius:4px; }
+    .actions { display:flex; gap:.5rem; flex-wrap:nowrap; align-items:center; }
+    .msg { color:#b00; min-height:18px; }
+    .flex { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div class="left flex">
+      <button class="btn" onclick="window.location.href='/store.html'">← Voltar para Pedidos</button>
+      <span class="muted">Logado como: <strong id="userName">…</strong></span>
+    </div>
+    <div class="right">
+      <button class="btn" onclick="logout()">Sair</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Logo da Home</h3>
+    <div class="flex">
+      <img id="logoImg" src="/logo.png" alt="Logo atual" class="thumb" style="height:60px"/>
+      <input id="logoFile" type="file" accept=".jpg,.jpeg,.png"/>
+      <button class="btn" onclick="uploadLogo()">Trocar Logo</button>
+      <span id="logoMsg" class="msg"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Taxas de Entrega por Bairro</h3>
+    <div class="grid2 head">
+      <div>ID</div><div>Bairro</div><div>Taxa (R$)</div><div>Ações</div>
+    </div>
+    <div id="zones"></div>
+    <div class="grid2" style="margin-top:.5rem;">
+      <div>Novo</div>
+      <input id="zoneName" placeholder="Nome do bairro"/>
+      <input id="zoneFee" type="number" min="0" step="0.5" placeholder="Taxa (R$)"/>
+      <button class="btn" onclick="addZone()">Adicionar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Itens do Cardápio</h3>
+    <div class="grid head">
+      <div>ID</div><div>Nome</div><div>Preço (R$)</div><div>Categoria</div><div>Imagem</div><div>Ações</div>
+    </div>
+    <div id="list"></div>
+  </div>
+
+  <div class="card">
+    <h3>Adicionar Item</h3>
+    <div class="grid" style="grid-template-columns:2fr 120px 160px 200px 160px;">
+      <input id="nameNew" placeholder="Nome"/>
+      <input id="priceNew" type="number" min="0" step="0.5" placeholder="Preço"/>
+      <select id="catNew">
+        <option>Esfihas</option>
+        <option>Bebidas</option>
+      </select>
+      <input id="imgNew" type="file" accept=".jpg,.jpeg,.png"/>
+      <button class="btn" onclick="addItem()">Incluir</button>
+    </div>
+  </div>
+
+<script>
+/* ================= Sessão / Auth ================= */
+async function ensureSession(){
+  try{
+    const r = await fetch('/api/me', { credentials:'include' });
+    const txt = await r.text();
+    let j; try { j = JSON.parse(txt); } catch { j = null; }
+    if(!r.ok || !j?.ok){
+      console.warn('Falha /api/me', r.status, txt);
+      location.href = '/login.html?back=' + encodeURIComponent(location.pathname);
+      return null;
+    }
+    document.querySelector('#userName').innerText = j.user.username;
+    return j.user;
+  }catch(e){
+    console.error('Erro /api/me', e);
+    location.href = '/login.html?back=' + encodeURIComponent(location.pathname);
+    return null;
+  }
+}
+
+async function logout(){
+  try{
+    await fetch('/api/auth/logout', { method:'POST', credentials:'include' });
+  }finally{
+    location.href = '/login.html';
+  }
+}
+
+/* ================= Utilidades ================= */
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
+function toast(msg){ alert(msg); }
+
+/* ================= Logo ================= */
+async function uploadLogo(){
+  const m = document.getElementById('logoMsg');
+  m.textContent = '';
+  const f = document.getElementById('logoFile').files[0];
+  if(!f){ m.textContent = 'Selecione um arquivo'; return; }
+  const fd = new FormData(); fd.append('logo', f);
+  try{
+    const res = await fetch('/api/upload-logo', { method:'POST', body: fd, credentials:'include' });
+    const txt = await res.text(); let data; try{ data = JSON.parse(txt);}catch{ data=null; }
+    if(!res.ok || !data?.ok){
+      m.textContent = 'Falha ao atualizar logo';
+      return;
+    }
+    const img = document.getElementById('logoImg');
+    img.src = '/uploads/logo.png?v=' + Date.now();
+    m.style.color = '#090'; m.textContent = 'Logo atualizada!';
+  }catch(e){
+    console.error(e); m.textContent = 'Erro de rede';
+  }
+}
+
+/* ================= Zonas ================= */
+async function loadZones(){
+  try{
+    const res = await fetch('/api/delivery-zones', { credentials:'include' });
+    const txt = await res.text(); let zones; try{ zones = JSON.parse(txt);}catch{ zones = []; }
+    renderZones(Array.isArray(zones) ? zones : []);
+  }catch(e){ console.error(e); }
+}
+
+function renderZones(zones){
+  const el = document.getElementById('zones');
+  el.innerHTML = '';
+  zones.forEach(z => {
+    const row = document.createElement('div');
+    row.className='grid2 row';
+    row.innerHTML = `
+      <div>${z.id}</div>
+      <div><input id="zn-${z.id}" value="${escapeHtml(z.name||'')}"/></div>
+      <div><input id="zf-${z.id}" type="number" step="0.5" value="${Number(z.fee||0).toFixed(2)}"/></div>
+      <div class="actions">
+        <button class="btn" onclick="saveZone(${z.id})">Salvar</button>
+        <button class="btn btn--danger" onclick="delZone(${z.id})">Excluir</button>
+      </div>
+    `;
+    el.appendChild(row);
+  });
+}
+
+async function addZone(){
+  const name = document.getElementById('zoneName').value.trim();
+  const fee = Number(document.getElementById('zoneFee').value || 0);
+  if(!name || fee<0){ toast('Informe bairro e taxa'); return; }
+  const res = await fetch('/api/delivery-zones', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify({name, fee})
+  });
+  if(!res.ok){ toast('Falha ao incluir zona'); return; }
+  document.getElementById('zoneName').value=''; document.getElementById('zoneFee').value='';
+  loadZones();
+}
+
+async function saveZone(id){
+  const name = document.getElementById('zn-'+id).value.trim();
+  const fee = Number(document.getElementById('zf-'+id).value || 0);
+  const res = await fetch('/api/delivery-zones/'+id, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify({name, fee})
+  });
+  if(!res.ok){ toast('Falha ao salvar zona'); return; }
+  toast('Bairro salvo!');
+}
+
+async function delZone(id){
+  if(!confirm('Excluir este bairro?')) return;
+  const res = await fetch('/api/delivery-zones/'+id, { method:'DELETE', credentials:'include' });
+  if(!res.ok){ toast('Falha ao excluir zona'); return; }
+  loadZones();
+}
+
+/* ================= Itens ================= */
+async function loadItems(){
+  try{
+    const res = await fetch('/api/menu', { credentials:'include' });
+    const txt = await res.text(); let items; try{ items = JSON.parse(txt);}catch{ items = []; }
+    renderItems(Array.isArray(items) ? items : []);
+  }catch(e){ console.error(e); }
+}
+
+/* helper: alterna miniatura e "sem imagem" */
+function setThumb(id, url){
+  const img = document.getElementById('thumb-' + id);
+  const label = document.getElementById('noimg-' + id);
+  if (!img || !label) return;
+
+  if (url) {
+    img.style.display = '';
+    img.onerror = () => { img.style.display='none'; label.style.display='inline'; };
+    img.src = url + (url.includes('?') ? '&' : '?') + 'v=' + Date.now(); // quebra cache
+    label.style.display = 'none';
+  } else {
+    img.style.display = 'none';
+    label.style.display = 'inline';
+  }
+}
+
+function renderItems(items){
+  const el = document.getElementById('list');
+  el.innerHTML = '';
+  items.forEach(it => {
+    const hasImg = !!it.image_url;
+    const row = document.createElement('div');
+    row.className='grid row';
+    row.innerHTML = `
+      <div>${it.id}</div>
+      <div><input value="${escapeHtml(it.name||'')}" id="n-${it.id}"/></div>
+      <div><input type="number" step="0.5" value="${Number(it.price||0).toFixed(2)}" id="p-${it.id}"/></div>
+      <div>
+        <select id="c-${it.id}">
+          ${['Esfihas','Bebidas'].map(c => `<option ${c===(it.category||'')?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <div class="flex">
+          <img id="thumb-${it.id}" class="thumb" ${hasImg ? `src="${it.image_url}?v=${Date.now()}"` : ''} alt="${escapeHtml(it.name||'')}" style="${hasImg ? '' : 'display:none'}" />
+          <span id="noimg-${it.id}" class="muted" style="${hasImg ? 'display:none' : ''}">sem imagem</span>
+          <input type="file" id="img-${it.id}" accept=".jpg,.jpeg,.png"/>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" onclick="saveItem(${it.id})">Salvar</button>
+        <button class="btn btn--danger" onclick="delItem(${it.id})">Excluir</button>
+      </div>
+    `;
+    el.appendChild(row);
+
+    // garante fallback na carga inicial
+    if (hasImg) {
+      const img = row.querySelector('#thumb-' + it.id);
+      const label = row.querySelector('#noimg-' + it.id);
+      img.onerror = () => { img.style.display='none'; label.style.display='inline'; };
+    }
+  });
+}
+
+/* ===== Envia a imagem do item para o BLOB no MySQL */
+async function sendImageForItem(id, file) {
+  const fd = new FormData();
+  fd.append('image', file);
+  const res = await fetch(`/api/menu/${id}/image`, {
+    method: 'POST',
+    body: fd,
+    credentials: 'include'
+  });
+  const txt = await res.text();
+  let data; try { data = JSON.parse(txt); } catch { data = null; }
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'Falha ao enviar imagem do item');
+  }
+  return data.image_url; // ex: /images/123
+}
+
+async function addItem(){
+  const name = document.getElementById('nameNew').value.trim();
+  const price = Number(document.getElementById('priceNew').value || 0);
+  const category = document.getElementById('catNew').value;
+  const f = document.getElementById('imgNew').files[0];
+  if(!name || price<=0){ toast('Informe nome e preço'); return; }
+
+  // 1) cria o item sem imagem
+  const res = await fetch('/api/menu', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify({ name, price, category })
+  });
+  const bodyText = await res.text();
+  let created; try { created = JSON.parse(bodyText); } catch { created = null; }
+  if(!res.ok || !created?.id){ toast('Falha ao incluir item'); return; }
+  const newId = created.id;
+
+  // 2) se houver arquivo, manda para /api/menu/:id/image (salva no MySQL)
+  if (f){
+    try {
+      await sendImageForItem(newId, f);
+    } catch (e) {
+      console.error(e);
+      toast('Item criado, mas falhou ao salvar a imagem');
+    }
+  }
+
+  // reset UI
+  document.getElementById('nameNew').value='';
+  document.getElementById('priceNew').value='';
+  document.getElementById('imgNew').value='';
+  await loadItems();
+}
+
+async function saveItem(id){
+  const name = document.getElementById('n-'+id).value.trim();
+  const price = Number(document.getElementById('p-'+id).value || 0);
+  const category = document.getElementById('c-'+id).value;
+
+  // 1) salva campos do item
+  const res = await fetch('/api/menu/'+id, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify({ name, price, category })
+  });
+  if(!res.ok){ toast('Falha ao salvar item'); return; }
+
+  // 2) se tiver nova imagem, envia para o BLOB
+  const f = document.getElementById('img-'+id)?.files?.[0];
+  if (f){
+    try {
+      const imageUrl = await sendImageForItem(id, f);
+      setThumb(id, imageUrl); // atualiza miniatura imediatamente
+      document.getElementById('img-'+id).value = ''; // limpa input
+    } catch (e) {
+      console.error(e);
+      toast('Item salvo, mas falhou ao salvar a imagem');
+    }
+  }
+
+  toast('Item salvo');
+  loadItems();
+}
+
+async function delItem(id){
+  if(!confirm('Excluir este item?')) return;
+  const res = await fetch('/api/menu/'+id, { method:'DELETE', credentials:'include' });
+  if(!res.ok){ toast('Falha ao apagar item'); return; }
+  await loadItems();
+}
+
+/* ================= Inicial ================= */
+(async () => {
+  const u = await ensureSession();
+  if (u){
+    await Promise.all([loadZones(), loadItems()]);
+  }
+})();
+</script>
+</body>
+</html>

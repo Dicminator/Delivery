@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tela da Loja - Pedidos</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 1rem; }
+    .bar { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap; }
+    .left, .right { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+    .btn { padding:.6rem 1rem; border:1px solid #333; background:#fff; border-radius:8px; cursor:pointer; transition:transform .08s ease; }
+    .btn:active { transform: scale(0.98); }
+    .btn[disabled]{ opacity:.6; cursor:not-allowed; }
+    .orders { max-width: 1100px; margin: auto; }
+    .row { display:grid; grid-template-columns: 80px 1fr 140px 200px 260px; gap:.5rem; padding:.5rem; border-bottom:1px solid #eee; align-items:center; transition: background-color .2s ease; }
+    .head { font-weight:bold; border-bottom:2px solid #333; }
+    .muted { color:#666; font-size:.9rem; }
+    .actions { display:flex; gap:.5rem; flex-wrap:wrap; }
+    select, input[type="date"] { padding:.4rem; }
+
+    /* Cores por status (mais suaves) */
+    .is-new  { background:#ffe6e0; }   /* vermelho claro */
+    .is-prep { background:#fff9cc; }   /* amarelo claro */
+    .is-out  { background:#e6ffe6; }   /* verde claro */
+    .is-ok   { background:#e6f0ff; }   /* azul claro */
+
+    .ping { animation: ping 1s ease-in-out 3; }
+    @keyframes ping {
+      0%   { box-shadow: 0 0 0 0 rgba(0, 200, 0, .7); }
+      100% { box-shadow: 0 0 0 16px rgba(0,0,0,0); }
+    }
+
+    /* Modal simples */
+    .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
+    .modal { background:#fff; border-radius:10px; max-width:600px; width:95%; padding:1rem; box-shadow:0 10px 30px rgba(0,0,0,.2); }
+    .modal h3 { margin-top:0; }
+    .modal .close { float:right; cursor:pointer; font-size:1.2rem; border:none; background:transparent; }
+    .modal .grid { display:grid; grid-template-columns: 1fr 1fr; gap:.5rem; }
+    .modal .line { display:flex; justify-content:space-between; }
+    .modal footer { display:flex; justify-content:flex-end; gap:.5rem; margin-top:1rem; }
+    @media(max-width:600px){ .modal .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div class="left">
+      <button class="btn" onclick="showOrders()">Pedidos</button>
+      <button class="btn" onclick="openAdmin()">Manutenção de Itens</button>
+      <label for="filterOn">Filtrar por data:</label>
+      <input type="date" id="filterOn"/>
+      <button class="btn" onclick="filterByDate()">Filtrar</button>
+      <button class="btn" onclick="clearFilter()">Limpar</button>
+    </div>
+    <div class="right">
+      <span class="muted">Logado como: <strong id="userName">…</strong></span>
+      <button class="btn" onclick="logout()">Sair</button>
+    </div>
+  </div>
+
+  <div class="orders" id="orders">
+    <div class="row head">
+      <div>#</div>
+      <div>Cliente</div>
+      <div>Total</div>
+      <div>Status</div>
+      <div>Ações</div>
+    </div>
+    <div id="list"></div>
+  </div>
+
+  <!-- Modal de detalhes -->
+  <div id="modalBackdrop" class="modal-backdrop" onclick="closeModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="close" onclick="hideModal()">✕</button>
+      <h3>Detalhes do Pedido</h3>
+      <div id="modalBody"></div>
+      <footer>
+        <button class="btn" onclick="hideModal()">Fechar</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Áudio com fallback (ogg + wav base64) -->
+  <audio id="ding" preload="auto">
+    <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg"/>
+    <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAAA" type="audio/wav"/>
+  </audio>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+/* ================= Sessão / Auth ================= */
+async function ensureSession(){
+  try{
+    const r = await fetch('/api/me', { credentials:'include' });
+    const txt = await r.text();
+    let j; try { j = JSON.parse(txt); } catch { j = null; }
+    if(!r.ok || !j?.ok){
+      console.warn('Falha /api/me', r.status, txt);
+      location.href = '/login.html?back=' + encodeURIComponent(location.pathname);
+      return null;
+    }
+    document.querySelector('#userName').innerText = j.user.username;
+    return j.user;
+  }catch(e){
+    console.error('Erro /api/me', e);
+    location.href = '/login.html?back=' + encodeURIComponent(location.pathname);
+    return null;
+  }
+}
+
+async function logout(){
+  try{
+    await fetch('/api/auth/logout', { method:'POST', credentials:'include' });
+  }finally{
+    location.href = '/login.html';
+  }
+}
+
+/* ================= Helpers ================= */
+function currency(v){ return 'R$ ' + Number(v).toFixed(2); }
+function showOrders(){ document.getElementById('orders').style.display = 'block'; }
+function openAdmin(){ window.open('/admin.html', '_blank'); }
+
+function todaySaoPaulo() {
+  const fmt = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo', year:'numeric', month:'2-digit', day:'2-digit' });
+  return fmt.format(new Date()); // "YYYY-MM-DD"
+}
+
+/* ================= Carregar pedidos ================= */
+let currentFilterOn = null;
+
+async function loadOrders(on = currentFilterOn){
+  try{
+    let url = '/api/orders';
+    if (on) url += '?on=' + encodeURIComponent(on);
+
+    const res = await fetch(url, { credentials:'include' });
+    const txt = await res.text();
+    let data; try { data = JSON.parse(txt); } catch { data = []; }
+    renderOrders(Array.isArray(data) ? data : []);
+  } catch(e){
+    console.error('Erro ao carregar pedidos', e);
+  }
+}
+
+/* ================= Filtro ================= */
+function filterByDate(){
+  const on = document.getElementById('filterOn').value || null;
+  currentFilterOn = on;
+  loadOrders();
+}
+
+function clearFilter(){
+  document.getElementById('filterOn').value = '';
+  currentFilterOn = null;
+  loadOrders();
+}
+
+/* ================= UI helpers ================= */
+function applyStatusColor(rowEl, status){
+  if(!rowEl) return;
+  rowEl.classList.remove('is-new','is-prep','is-out','is-ok');
+  const s = (status || '').trim().toLowerCase();
+  if (s.includes('pedido novo'))            rowEl.classList.add('is-new');
+  else if (s.includes('em preparo'))        rowEl.classList.add('is-prep');
+  else if (s.includes('saiu para entrega')) rowEl.classList.add('is-out');
+  else if (s.includes('concluido'))         rowEl.classList.add('is-ok');
+}
+
+function setConfirmState(rowEl, status){
+  const btn = rowEl?.querySelector('button[data-action="confirm"]');
+  if(!btn) return;
+  const isNew = String(status||'').toLowerCase() === 'pedido novo';
+  btn.disabled = isNew;
+  btn.title = isNew ? 'Altere o status para imprimir' : '';
+}
+
+function renderOrders(rows){
+  const el = document.getElementById('list');
+  el.innerHTML = '';
+  rows.forEach(o => {
+    const div = document.createElement('div');
+    div.className = 'row';
+    div.id = 'order-row-'+o.id;
+
+    const statuses = ['Pedido Novo','Em preparo','Saiu para entrega','Concluido'];
+    const statusOptions = statuses.map(s => `<option ${s===o.status?'selected':''}>${s}</option>`).join('');
+
+    div.innerHTML = `
+      <div>${o.id}</div>
+      <div>
+        <div>${o.customer_name || ''}</div>
+        <div class="muted">${new Date(o.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</div>
+      </div>
+      <div>${currency(o.total)}</div>
+      <div>
+        <select onchange="changeStatus(${o.id}, this.value)">${statusOptions}</select>
+      </div>
+      <div class="actions">
+        <button class="btn" onclick="viewOrder(${o.id})">Ver pedido</button>
+        <button class="btn" data-action="confirm" onclick="confirmAndPrint(${o.id}, this)">Imprimir</button>
+      </div>
+    `;
+
+    el.appendChild(div);
+    applyStatusColor(div, o.status);
+    setConfirmState(div, o.status);
+  });
+}
+
+/* ================= Ações ================= */
+async function changeStatus(id, status){
+  try{
+    const res = await fetch('/api/orders/'+id+'/status', {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body: JSON.stringify({status})
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(()=> '');
+      throw new Error(`HTTP ${res.status} – ${t.slice(0,200)}`);
+    }
+    const row = document.getElementById('order-row-'+id);
+    applyStatusColor(row, status);
+    setConfirmState(row, status);
+  }catch(e){
+    console.error('Erro ao mudar status', e);
+    alert('Falha ao alterar status.');
+  }
+}
+
+async function confirmAndPrint(id, btn){
+  const row = document.getElementById('order-row-'+id);
+  const sel = row?.querySelector('select');
+  const statusAtual = sel?.value || '';
+
+  // Se ainda for "Pedido Novo", troca para "Em preparo" antes de imprimir
+  if (String(statusAtual).toLowerCase() === 'pedido novo'){
+    await changeStatus(id, 'Em preparo');
+  }
+
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Imprimindo...';
+  try{
+    const res = await fetch(`/api/orders/${id}/print`, { method:'POST', credentials:'include' });
+    const txt = await res.text(); let data; try{ data = JSON.parse(txt); }catch{ data=null; }
+    if (!res.ok || !data?.ok) {
+      alert('Falha ao imprimir: ' + (data?.error || `HTTP ${res.status}`));
+    } else {
+      row.classList.add('ping');
+      setTimeout(()=>row.classList.remove('ping'), 1500);
+    }
+  }catch(e){
+    console.error(e);
+    alert('Erro ao imprimir.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+async function viewOrder(id){
+  try{
+    const res = await fetch('/api/orders/'+id, { credentials:'include' });
+    const txt = await res.text(); let data; try{ data = JSON.parse(txt); }catch{ data=null; }
+    if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+    const o = data.order;
+    const body = document.getElementById('modalBody');
+    const itensHtml = (o.items||[]).map(i => `
+      <div class="line"><div>${i.qty}x ${i.item_name}</div><div>R$ ${(Number(i.price)*Number(i.qty)).toFixed(2)}</div></div>
+    `).join('') || '<div class="muted">Sem itens.</div>';
+
+    body.innerHTML = `
+      <div class="grid">
+        <div><strong>Pedido #</strong> ${o.id}</div>
+        <div><strong>Data</strong> ${new Date(o.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</div>
+        <div><strong>Cliente</strong> ${o.customer_name || ''}</div>
+        <div><strong>Telefone</strong> ${o.phone || ''}</div>
+        <div style="grid-column:1/-1;"><strong>Endereço</strong><br>${o.address || ''}</div>
+        <div><strong>Pagamento</strong> ${o.payment_method || ''}</div>
+        <div style="grid-column:1/-1;"><strong>Obs</strong><br>${o.notes || ''}</div>
+      </div>
+      <hr/>
+      <h4>Itens</h4>
+      ${itensHtml}
+      <hr/>
+      <div class="line"><div>Subtotal</div><div>R$ ${Number(o.subtotal).toFixed(2)}</div></div>
+      <div class="line"><div>Entrega</div><div>R$ ${Number(o.delivery_fee).toFixed(2)}</div></div>
+      <div class="line"><div><strong>Total</strong></div><div><strong>R$ ${Number(o.total).toFixed(2)}</strong></div></div>
+    `;
+    showModal();
+  } catch(e){
+    console.error(e);
+    alert('Não foi possível carregar o pedido.');
+  }
+}
+
+/* ================= Modal ================= */
+function showModal(){ document.getElementById('modalBackdrop').style.display = 'flex'; }
+function hideModal(){ document.getElementById('modalBackdrop').style.display = 'none'; }
+function closeModal(e){ if (e.target.id === 'modalBackdrop') hideModal(); }
+
+/* ================= Socket.io ================= */
+const audio = document.getElementById('ding');
+
+/* Desbloqueia o áudio na primeira interação do usuário (evita bloqueio de autoplay) */
+function unlockAudio(){
+  audio.muted = true;
+  audio.play().then(()=>{ audio.pause(); audio.currentTime = 0; audio.muted = false; }).catch(()=>{});
+}
+document.addEventListener('pointerdown', unlockAudio, { once:true });
+
+const WS = window.WS_URL || window.location.origin;
+const socket = io(WS, { withCredentials: true, transports: ['websocket','polling'] });
+
+socket.on('connect', () => console.log('Conectado à loja, socket id:', socket.id));
+
+socket.on('new-order', (order) => {
+  // Toca o alerta sonoro
+  try { audio.currentTime = 0; audio.play().catch(()=>{}); } catch(e){}
+
+  // Recarrega lista e destaca o novo pedido
+  loadOrders().then(() => {
+    const row = document.getElementById('order-row-'+order.id);
+    if (row){
+      applyStatusColor(row, 'Pedido Novo');
+      setConfirmState(row, 'Pedido Novo');
+      row.classList.add('ping');
+      setTimeout(()=>row.classList.remove('ping'), 1500);
+      row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+socket.on('order-status', ({id, status}) => {
+  const row = document.getElementById('order-row-'+id);
+  const sel = row?.querySelector('select');
+  if (sel) sel.value = status;
+  applyStatusColor(row, status);
+  setConfirmState(row, status);
+});
+
+socket.on('printed', ({orderId}) => {
+  const row = document.getElementById('order-row-'+orderId);
+  if (row){ row.classList.add('ping'); setTimeout(()=>row.classList.remove('ping'), 1500); }
+});
+
+/* ================= Inicial ================= */
+document.addEventListener('DOMContentLoaded', async () => {
+  const u = await ensureSession();
+  if (!u) return;
+  const today = todaySaoPaulo();
+  document.getElementById('filterOn').value = today;
+  currentFilterOn = today;
+  loadOrders(today);
+});
+  </script>
+</body>
+</html>
