@@ -250,6 +250,61 @@ function placeholders(n, start = 1) {
   return Array.from({ length: n }, (_, i) => `$${i + start}`).join(',');
 }
 
+
+        /* ======== Anti-autofill para “Bairro” ======== */
+        
+        /* 1) Nunca deixe a caixa de sugestões exibir texto cru por engano */
+        function safeHTML(str){
+          const div = document.createElement('div');
+          div.textContent = String(str ?? '');
+          return div.innerHTML;
+        }
+        
+        /* Reaproveita sua renderSuggestions com segurança extra */
+        function renderSuggestions(list){
+          if (!list || list.length === 0){
+            suggestBox.style.display = 'none';
+            suggestBox.innerHTML = '';
+            return;
+          }
+          suggestBox.innerHTML = list.slice(0, 12).map((z) => `
+            <div class="item" data-id="${safeHTML(z.id)}" data-fee="${Number(z.fee)}" tabindex="-1">
+              ${safeHTML(z.name)} — R$ ${Number(z.fee).toFixed(2)}
+            </div>
+          `).join('');
+          suggestBox.style.display = 'block';
+        }
+        
+        /* 2) “Bairro” começa readonly e só libera ao teclar (obriga digitar) */
+        let zoneUserStartedTyping = false;
+        
+        function enableZoneTyping(){
+          if (!zoneUserStartedTyping){
+            zoneUserStartedTyping = true;
+            zoneInput.readOnly = false;
+            // se o navegador preencheu algo, limpamos para forçar a busca do seu banco
+            if (zoneInput.value) zoneInput.value = '';
+          }
+        }
+        
+        // libera ao pressionar qualquer tecla “real”
+        zoneInput.addEventListener('keydown', (e) => {
+          // ignora Tab, Shift, Ctrl etc
+          if (e.key && e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete'){
+            enableZoneTyping();
+          }
+        });
+        
+        // se o navegador tentar focar com valor já preenchido (autofill), limpamos
+        zoneInput.addEventListener('focus', () => {
+          if (zoneInput.readOnly && zoneInput.value) zoneInput.value = '';
+        });
+        
+        /* 3) Mais uma barreira: ao carregar a página, zera o campo se veio preenchido */
+        document.addEventListener('DOMContentLoaded', () => {
+          if (zoneInput.value) zoneInput.value = '';
+        });
+
 /* ------------------- INIT DB (PostgreSQL) ------------------- */
 async function initDb() {
   // menu_items
