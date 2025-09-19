@@ -94,7 +94,7 @@ const io = new SocketIOServer(server, {
 });
 
 /* ------------------- PRINT/DEVICE CONFIG ------------------- */
-const PORT                    = process.env.PORT || 3000;
+const PORT                    = process.env.PORT || 8000;
 const PRINT_ENABLED           = (process.env.PRINT_ENABLED || 'false').toLowerCase() === 'true';
 const PRINTER_NAME            = (process.env.PRINTER_NAME || 'VID').trim(); // (não usado, mas mantido)
 const PRINTER_SHARE           = (process.env.PRINTER_SHARE || '\\\\DESKTOP\\VID').trim();
@@ -1097,7 +1097,7 @@ app.get(/^(?!\/(api|uploads|images|healthz|debug|print)(\/|$)).*/, (req, res) =>
 });
 
 /* ------------------- START: sobe HTTP primeiro ------------------- */
-server.listen(PORT, async () => {
+server.listen(PORT, '0.0.0.0', async () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
   console.log(`Home:  http://localhost:${PORT}/index.html`);
   console.log(`Loja:  http://localhost:${PORT}/store.html`);
