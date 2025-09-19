@@ -81,12 +81,21 @@
   </div>
 
   <!-- Endereço -->
-  <div>
-    <label for="address">Endereço</label>
-    <div class="grid" style="grid-template-columns:1fr;">
-      <textarea id="address" placeholder="Endereço completo"></textarea>
+    <div>
+      <label for="address">Endereço</label>
+      <div class="grid" style="grid-template-columns:1fr;">
+        <textarea
+          id="address"
+          name="addr_manual"            <!-- nome não padrão para evitar heurística de autofill -->
+          placeholder="Endereço completo"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          readonly                      <!-- bloqueia autofill até digitar -->
+        ></textarea>
+      </div>
     </div>
-  </div>
 
   <!-- Bairro (autocomplete) -->
   <div>
