@@ -94,23 +94,22 @@ const io = new SocketIOServer(server, {
 });
 
 /* ------------------- PRINT/DEVICE CONFIG ------------------- */
-const PORT                    = process.env.PORT || 8000;
-//const PRINT_ENABLED           = (process.env.PRINT_ENABLED || 'false').toLowerCase() === 'true';
-//const PRINTER_NAME            = (process.env.PRINTER_NAME || 'VID').trim(); // (não usado, mas mantido)
+/* ------------------- PRINT/DEVICE CONFIG ------------------- */
+// Koyeb está checando 8000; se não houver PORT no ambiente, cai para 8000.
+const PORT                    = parseInt(process.env.PORT || '8000', 10);
 
-//const PRINTER_SHARE           = (process.env.PRINTER_SHARE || '\\\\DESKTOP\\VID').trim();
+// se quiser travar impressão off, troque a linha abaixo por: const PRINT_ENABLED = false;
+const PRINT_ENABLED = false;
 
-//const PRINTER_HOST            = process.env.PRINTER_HOST || '192.168.0.50';
+const PRINTER_NAME            = (process.env.PRINTER_NAME || 'VID').trim(); // (não usado, mas mantido)
+const PRINTER_SHARE           = (process.env.PRINTER_SHARE || '\\\\DESKTOP\\VID').trim();
+const PRINTER_HOST            = process.env.PRINTER_HOST || '192.168.0.50';
+const PRINTER_PORT            = parseInt(process.env.PRINTER_PORT || '9100', 10);
+const PRINTER_ENCODING        = process.env.PRINTER_ENCODING || 'GB18030';
+const PRINTER_TEXT_CODEPAGE   = (process.env.PRINTER_TEXT_CODEPAGE || 'cp1252').toLowerCase();
+const PRINT_AGENT_URL_ENV     = process.env.PRINT_AGENT_URL || '';
+const PRINT_AGENT_TOKEN       = process.env.PRINT_AGENT_TOKEN || '';
 
-//const PRINTER_PORT            = parseInt(process.env.PRINTER_PORT || '9100', 10);
-
-//const PRINTER_ENCODING        = process.env.PRINTER_ENCODING || 'GB18030';
-
-//const PRINTER_TEXT_CODEPAGE   = (process.env.PRINTER_TEXT_CODEPAGE || 'cp1252').toLowerCase();
-
-//const PRINT_AGENT_URL_ENV     = process.env.PRINT_AGENT_URL || '';
-
-//const PRINT_AGENT_TOKEN       = process.env.PRINT_AGENT_TOKEN || '';
 
 /* ------------------- E-MAIL CONFIG (SMTP + Resend) ------------------- */
 const EMAIL_ENABLED    = (process.env.EMAIL_ENABLED || 'false').toLowerCase() === 'true';
