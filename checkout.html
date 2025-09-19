@@ -81,30 +81,32 @@
   </div>
 
   <!-- Endereço -->
-    <div>
-      <label for="address">Endereço</label>
-      <div class="grid" style="grid-template-columns:1fr;">
-        <textarea
-          id="address"
-          name="addr_manual"            <!-- nome não padrão para evitar heurística de autofill -->
-          placeholder="Endereço completo"
-          autocomplete="off"
-          autocorrect="off"
-          autocapitalize="off"
-          spellcheck="false"
-          readonly                      <!-- bloqueia autofill até digitar -->
-        ></textarea>
-      </div>
-    </div>
-
-  <!-- Bairro (autocomplete) -->
   <div>
-    <label for="zoneInput">Bairro</label>
-    <div class="autocomplete">
-      <input id="zoneInput" type="text" placeholder="Comece a digitar o bairro..." autocomplete="off" />
-      <div id="zoneSuggest" class="suggestions"></div>
+    <label for="address">Endereço</label>
+    <div class="grid" style="grid-template-columns:1fr;">
+      <textarea id="address" placeholder="Endereço completo"></textarea>
     </div>
   </div>
+
+  <!-- Bairro (autocomplete) -->
+    <div>
+      <label for="zoneInput">Bairro</label>
+      <div class="autocomplete">
+        <input
+          id="zoneInput"
+          name="zone_manual"            <!-- nome não padrão (evita heurísticas) -->
+          type="text"
+          placeholder="Comece a digitar o bairro..."
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          inputmode="search"
+          readonly                       <!-- trava até digitar -->
+        />
+        <div id="zoneSuggest" class="suggestions"></div>
+      </div>
+    </div>
 
   <div>
     <label>Taxa de Entrega (R$)</label>
