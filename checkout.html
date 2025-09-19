@@ -300,16 +300,11 @@ function closeSuggestions(){
 
 function pickZoneByElement(el){
   const id  = el.getAttribute('data-id');
-  const fee = Number(el.getAttribute('data-fee')||0);
   const z   = zones.find(x => String(x.id) === String(id));
   if (z){
     selectedZone = z;
     zoneInput.value = z.name;
-
-    // só aplica taxa se estiver em modo Entrega
-    if (deliveryMode === 'Entrega') {
-      setDeliveryFee(z.fee);
-    }
+    if (deliveryMode === 'Entrega') setDeliveryFee(z.fee);
   } else {
     selectedZone = null;
     if (deliveryMode === 'Entrega') setDeliveryFee(0);
@@ -321,7 +316,7 @@ function pickZoneByElement(el){
 let kbIndex = -1;
 
 zoneInput.addEventListener('input', () => {
-  if (zoneInput.disabled) return; // não sugere quando desabilitado (retirada)
+  if (zoneInput.disabled) return;
   const q = zoneInput.value.trim();
   selectedZone = null;     // ao digitar, limpa seleção
   if (deliveryMode === 'Entrega') setDeliveryFee(0); // taxa volta a 0 até escolher
@@ -333,7 +328,6 @@ zoneInput.addEventListener('input', () => {
 
 zoneInput.addEventListener('focus', () => {
   if (zoneInput.disabled) return;
-  // Se o navegador tentou autofill, limpamos ao focar
   if (zoneInput.dataset.autofilled === '1') {
     zoneInput.value = '';
     zoneInput.dataset.autofilled = '0';
@@ -509,6 +503,18 @@ function openWhats(orderId=null){
   window.open(url, '_blank');
 }
 
+/* ---------- Aux: garantir seleção de bairro a partir do texto digitado ---------- */
+function ensureZoneFromTypedName(){
+  if (selectedZone) return;
+  const typed = (zoneInput.value || '').trim();
+  if (!typed) return;
+  const z = zones.find(x => x.name.toLowerCase() === typed.toLowerCase());
+  if (z){
+    selectedZone = z;
+    if (deliveryMode === 'Entrega') setDeliveryFee(z.fee);
+  }
+}
+
 /* ---------- Enviar pedido ---------- */
 async function finishOrder(btn){
   animateBtn(btn);
@@ -516,22 +522,39 @@ async function finishOrder(btn){
   const items = Cart.load();
   if(items.length===0){ alert('Carrinho vazio'); return; }
 
-  // Validação mínima:
   const name = document.getElementById('customer_name').value.trim();
   const addr = document.getElementById('address').value.trim();
-
-  // Se modo Entrega, endereço é obrigatório
-  if (deliveryMode === 'Entrega' && (!name || !addr)){
-    alert('Informe seu nome e endereço.');
-    return;
-  }
-  // Se Retirada, endereço não é obrigatório
-  if (deliveryMode === 'Retirada' && !name){
-    alert('Informe seu nome.');
-    return;
-  }
-
   const phoneDigits = onlyDigits(document.getElementById('phone').value).slice(0,11);
+
+  /* Regras de obrigatoriedade:
+     - Sempre: nome e telefone (mín. 10 dígitos: DDD + número)
+     - Entrega: também endereço e bairro (selecionado da lista ou igual ao cadastro)
+  */
+  if (!name){
+    alert('Informe seu nome.');
+    document.getElementById('customer_name').focus();
+    return;
+  }
+  if (phoneDigits.length < 10){
+    alert('Informe um telefone válido (DDD + número).');
+    phoneEl.focus();
+    return;
+  }
+
+  if (deliveryMode === 'Entrega'){
+    if (!addr){
+      alert('Informe seu endereço.');
+      addressEl.focus();
+      return;
+    }
+    // tenta casar o texto digitado com um bairro do banco
+    ensureZoneFromTypedName();
+    if (!selectedZone){
+      alert('Selecione o bairro (use a lista de sugestões).');
+      zoneInput.focus();
+      return;
+    }
+  }
 
   const body = {
     customer_name: name,
@@ -540,8 +563,8 @@ async function finishOrder(btn){
     payment_method: document.getElementById('payment_method').value,
     notes: document.getElementById('notes').value,
     delivery_fee: getDelivery(),
-    zone_id: selectedZone?.id || null, // envia ID do bairro se selecionado
-    mode: deliveryMode, // envia o modo escolhido (Entrega/Retirada)
+    zone_id: deliveryMode === 'Entrega' ? (selectedZone?.id || null) : null,
+    mode: deliveryMode,
     items
   };
 
