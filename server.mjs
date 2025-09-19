@@ -213,6 +213,21 @@ const pool = DB_URL
       ssl: { rejectUnauthorized: false }
     });
 
+/* Logs úteis do DB (para deploy) */
+try {
+  if (DB_URL) {
+    const u = new URL(DB_URL);
+    console.log('[DB] usando DATABASE_URL host=%s db=%s sslmode=%s',
+      u.hostname, u.pathname.slice(1), u.searchParams.get('sslmode') || '');
+  } else {
+    console.log('[DB] usando variáveis separadas host=%s db=%s port=%s',
+      process.env.DB_HOST, process.env.DB_NAME, process.env.DB_PORT || '5432');
+  }
+} catch (e) {
+  console.warn('[DB] não foi possível parsear URL:', e?.message || e);
+}
+pool.on('error', (err) => console.error('[PG POOL ERROR]', err?.message || err));
+
 async function run(sql, params = []) {
   const res = await pool.query(sql, params);
   return res; // res.rows, res.rowCount
@@ -846,7 +861,7 @@ app.get('/api/orders/:id', async (req, res) => {
   }
 });
 
-/* --------- Helpers do agente (mantidos) ---------- */
+/* --------- Helpers do agente ---------- */
 function ensurePrintPath(url) {
   if (!url) return '';
   const base = String(url).replace(/\/+$/, '');
@@ -1081,10 +1096,7 @@ app.get(/^(?!\/(api|uploads|images|healthz|debug|print)(\/|$)).*/, (req, res) =>
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-/* ====== Inicializa DB antes de subir o servidor ====== */
-await initDb();
-
-/* ------------------- START ------------------- */
+/* ------------------- START: sobe HTTP primeiro ------------------- */
 server.listen(PORT, async () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
   console.log(`Home:  http://localhost:${PORT}/index.html`);
@@ -1105,6 +1117,16 @@ server.listen(PORT, async () => {
     }
   }
 });
+
+/* ====== Inicializa DB em background (não bloqueia boot/health) ====== */
+(async () => {
+  try {
+    await initDb();
+  } catch (e) {
+    console.error('[DB INIT FAILED]', e?.message || e);
+    // não finaliza o processo — mantém o HTTP vivo para o healthcheck
+  }
+})();
 
 /* ---------- Shutdown gracioso ---------- */
 function shutdown(sig) {
