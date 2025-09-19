@@ -50,15 +50,21 @@
     /* Grupo Entrega/Retirada */
     .mode-group { display:flex; gap:.5rem; margin:.5rem 0; flex-wrap:wrap; }
     .btn[disabled] { opacity:.7; cursor:not-allowed; }
+
+    /* Honeypots invisíveis para capturar autofill */
     .af-trap {
-          position: absolute !important;
-          left: -9999px !important;
-          top: -9999px !important;
-          width: 0 !important;
-          height: 0 !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-        }
+      position: absolute !important;
+      left: -9999px !important;
+      top: -9999px !important;
+      width: 0 !important;
+      height: 0 !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+
+    /* Detector de autofill (Chrome/WebKit) */
+    @keyframes autofill-start {}
+    input:-webkit-autofill { animation-name: autofill-start; animation-duration: 0s; }
   </style>
   <!-- helpers.js define API_BASE, apiFetch, apiFetchJSON, Cart, Nav... -->
   <script src="js/helpers.js?v=2"></script>
@@ -98,29 +104,29 @@
   </div>
 
   <!-- Bairro (autocomplete) -->
-          <div>
-            <label for="zoneInput">Bairro</label>
-          
-            <!-- Honeypots que capturam o autofill do navegador -->
-            <input class="af-trap" type="text" name="street-address"  autocomplete="street-address"  tabindex="-1" aria-hidden="true">
-            <input class="af-trap" type="text" name="address-level2"  autocomplete="address-level2"  tabindex="-1" aria-hidden="true">
-            <input class="af-trap" type="text" name="postal-code"     autocomplete="postal-code"     tabindex="-1" aria-hidden="true">
-          
-            <div class="autocomplete">
-              <!-- name “neutro”, autocomplete “new-password”, começa readonly -->
-              <input
-                id="zoneInput"
-                name="zone_db"
-                type="search"
-                placeholder="Comece a digitar o bairro..."
-                autocomplete="new-password"
-                autocapitalize="off" autocorrect="off" spellcheck="false"
-                inputmode="search"
-                readonly
-              />
-              <div id="zoneSuggest" class="suggestions" aria-live="polite"></div>
-            </div>
-          </div>
+  <div>
+    <label for="zoneInput">Bairro</label>
+
+    <!-- Honeypots que capturam o autofill do navegador -->
+    <input class="af-trap" type="text" name="street-address"  autocomplete="street-address"  tabindex="-1" aria-hidden="true">
+    <input class="af-trap" type="text" name="address-level2"  autocomplete="address-level2"  tabindex="-1" aria-hidden="true">
+    <input class="af-trap" type="text" name="postal-code"     autocomplete="postal-code"     tabindex="-1" aria-hidden="true">
+
+    <div class="autocomplete">
+      <!-- name “neutro” + autocomplete “new-password” para desarmar heurísticas de autofill -->
+      <input
+        id="zoneInput"
+        name="zone_db"
+        type="search"
+        placeholder="Comece a digitar o bairro..."
+        autocomplete="new-password"
+        autocapitalize="off" autocorrect="off" spellcheck="false"
+        inputmode="search"
+        enterkeyhint="search"
+      />
+      <div id="zoneSuggest" class="suggestions" aria-live="polite"></div>
+    </div>
+  </div>
 
   <div>
     <label>Taxa de Entrega (R$)</label>
@@ -327,6 +333,11 @@ zoneInput.addEventListener('input', () => {
 
 zoneInput.addEventListener('focus', () => {
   if (zoneInput.disabled) return;
+  // Se o navegador tentou autofill, limpamos ao focar
+  if (zoneInput.dataset.autofilled === '1') {
+    zoneInput.value = '';
+    zoneInput.dataset.autofilled = '0';
+  }
   const q = zoneInput.value.trim();
   if (!q){ closeSuggestions(); return; }
   const list = zones.filter(z => includesCI(z.name, q));
@@ -368,6 +379,14 @@ suggestBox.addEventListener('click', (e) => {
 // fecha caixa ao clicar fora
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.autocomplete')) closeSuggestions();
+});
+
+/* ---------- Guarda contra autofill (Chrome/Safari) ---------- */
+zoneInput.addEventListener('animationstart', (e) => {
+  if (e.animationName === 'autofill-start') {
+    zoneInput.value = '';
+    zoneInput.dataset.autofilled = '1';
+  }
 });
 
 /* ---------- Travar edição manual da taxa (além do disabled em Retirada) ---------- */
@@ -552,8 +571,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   pmSel.value = 'Dinheiro';
   hidePix();
 
-  // estado inicial explícito do Bairro (vazio com placeholder)
+  // limpa qualquer valor que o navegador possa ter sugerido no "Bairro"
   zoneInput.value = '';
+  zoneInput.dataset.autofilled = '0';
 
   // liga os botões de modo
   btnEntrega.addEventListener('click', () => setMode('Entrega'));
