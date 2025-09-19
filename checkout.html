@@ -50,6 +50,15 @@
     /* Grupo Entrega/Retirada */
     .mode-group { display:flex; gap:.5rem; margin:.5rem 0; flex-wrap:wrap; }
     .btn[disabled] { opacity:.7; cursor:not-allowed; }
+    .af-trap {
+          position: absolute !important;
+          left: -9999px !important;
+          top: -9999px !important;
+          width: 0 !important;
+          height: 0 !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
   </style>
   <!-- helpers.js define API_BASE, apiFetch, apiFetchJSON, Cart, Nav... -->
   <script src="js/helpers.js?v=2"></script>
@@ -89,24 +98,29 @@
   </div>
 
   <!-- Bairro (autocomplete) -->
-    <div>
-      <label for="zoneInput">Bairro</label>
-      <div class="autocomplete">
-        <input
-          id="zoneInput"
-          name="zone_manual"            <!-- nome não padrão (evita heurísticas) -->
-          type="text"
-          placeholder="Comece a digitar o bairro..."
-          autocomplete="off"
-          autocapitalize="off"
-          autocorrect="off"
-          spellcheck="false"
-          inputmode="search"
-          readonly                       <!-- trava até digitar -->
-        />
-        <div id="zoneSuggest" class="suggestions"></div>
-      </div>
-    </div>
+          <div>
+            <label for="zoneInput">Bairro</label>
+          
+            <!-- Honeypots que capturam o autofill do navegador -->
+            <input class="af-trap" type="text" name="street-address"  autocomplete="street-address"  tabindex="-1" aria-hidden="true">
+            <input class="af-trap" type="text" name="address-level2"  autocomplete="address-level2"  tabindex="-1" aria-hidden="true">
+            <input class="af-trap" type="text" name="postal-code"     autocomplete="postal-code"     tabindex="-1" aria-hidden="true">
+          
+            <div class="autocomplete">
+              <!-- name “neutro”, autocomplete “new-password”, começa readonly -->
+              <input
+                id="zoneInput"
+                name="zone_db"
+                type="search"
+                placeholder="Comece a digitar o bairro..."
+                autocomplete="new-password"
+                autocapitalize="off" autocorrect="off" spellcheck="false"
+                inputmode="search"
+                readonly
+              />
+              <div id="zoneSuggest" class="suggestions" aria-live="polite"></div>
+            </div>
+          </div>
 
   <div>
     <label>Taxa de Entrega (R$)</label>
