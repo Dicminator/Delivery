@@ -94,20 +94,20 @@ const io = new SocketIOServer(server, {
 });
 
 /* ------------------- PRINT/DEVICE CONFIG ------------------- */
-// Koyeb está checando 8000; se não houver PORT no ambiente, cai para 8000.
-const PORT                    = parseInt(process.env.PORT || '8000', 10);
+// Koyeb checa 8000; se não houver PORT no ambiente, cai para 8000.
+const PORT = parseInt(process.env.PORT || '8000', 10);
 
-// se quiser travar impressão off, troque a linha abaixo por: const PRINT_ENABLED = false;
+// Impressão travada OFF
 const PRINT_ENABLED = false;
 
-const PRINTER_NAME            = (process.env.PRINTER_NAME || 'VID').trim(); // (não usado, mas mantido)
-const PRINTER_SHARE           = (process.env.PRINTER_SHARE || '\\\\DESKTOP\\VID').trim();
-const PRINTER_HOST            = process.env.PRINTER_HOST || '192.168.0.50';
-const PRINTER_PORT            = parseInt(process.env.PRINTER_PORT || '9100', 10);
-const PRINTER_ENCODING        = process.env.PRINTER_ENCODING || 'GB18030';
-const PRINTER_TEXT_CODEPAGE   = (process.env.PRINTER_TEXT_CODEPAGE || 'cp1252').toLowerCase();
-const PRINT_AGENT_URL_ENV     = process.env.PRINT_AGENT_URL || '';
-const PRINT_AGENT_TOKEN       = process.env.PRINT_AGENT_TOKEN || '';
+const PRINTER_NAME          = (process.env.PRINTER_NAME || 'VID').trim(); // mantido para compat.
+const PRINTER_SHARE         = (process.env.PRINTER_SHARE || '\\\\DESKTOP\\VID').trim();
+const PRINTER_HOST          = process.env.PRINTER_HOST || '192.168.0.50';
+const PRINTER_PORT          = parseInt(process.env.PRINTER_PORT || '9100', 10);
+const PRINTER_ENCODING      = process.env.PRINTER_ENCODING || 'GB18030';
+const PRINTER_TEXT_CODEPAGE = (process.env.PRINTER_TEXT_CODEPAGE || 'cp1252').toLowerCase();
+const PRINT_AGENT_URL_ENV   = process.env.PRINT_AGENT_URL || '';
+const PRINT_AGENT_TOKEN     = process.env.PRINT_AGENT_TOKEN || '';
 
 /* ------------------- E-MAIL CONFIG (SMTP + Resend) ------------------- */
 const EMAIL_ENABLED    = (process.env.EMAIL_ENABLED || 'false').toLowerCase() === 'true';
@@ -249,61 +249,6 @@ async function get(sql, params = []) {
 function placeholders(n, start = 1) {
   return Array.from({ length: n }, (_, i) => `$${i + start}`).join(',');
 }
-
-
-        /* ======== Anti-autofill para “Bairro” ======== */
-        
-        /* 1) Nunca deixe a caixa de sugestões exibir texto cru por engano */
-        function safeHTML(str){
-          const div = document.createElement('div');
-          div.textContent = String(str ?? '');
-          return div.innerHTML;
-        }
-        
-        /* Reaproveita sua renderSuggestions com segurança extra */
-        function renderSuggestions(list){
-          if (!list || list.length === 0){
-            suggestBox.style.display = 'none';
-            suggestBox.innerHTML = '';
-            return;
-          }
-          suggestBox.innerHTML = list.slice(0, 12).map((z) => `
-            <div class="item" data-id="${safeHTML(z.id)}" data-fee="${Number(z.fee)}" tabindex="-1">
-              ${safeHTML(z.name)} — R$ ${Number(z.fee).toFixed(2)}
-            </div>
-          `).join('');
-          suggestBox.style.display = 'block';
-        }
-        
-        /* 2) “Bairro” começa readonly e só libera ao teclar (obriga digitar) */
-        let zoneUserStartedTyping = false;
-        
-        function enableZoneTyping(){
-          if (!zoneUserStartedTyping){
-            zoneUserStartedTyping = true;
-            zoneInput.readOnly = false;
-            // se o navegador preencheu algo, limpamos para forçar a busca do seu banco
-            if (zoneInput.value) zoneInput.value = '';
-          }
-        }
-        
-        // libera ao pressionar qualquer tecla “real”
-        zoneInput.addEventListener('keydown', (e) => {
-          // ignora Tab, Shift, Ctrl etc
-          if (e.key && e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete'){
-            enableZoneTyping();
-          }
-        });
-        
-        // se o navegador tentar focar com valor já preenchido (autofill), limpamos
-        zoneInput.addEventListener('focus', () => {
-          if (zoneInput.readOnly && zoneInput.value) zoneInput.value = '';
-        });
-        
-        /* 3) Mais uma barreira: ao carregar a página, zera o campo se veio preenchido */
-        document.addEventListener('DOMContentLoaded', () => {
-          if (zoneInput.value) zoneInput.value = '';
-        });
 
 /* ------------------- INIT DB (PostgreSQL) ------------------- */
 async function initDb() {
@@ -986,21 +931,6 @@ async function notifyAgentPrint(order) {
     throw new Error(`Agente HTTP ${resp.status} – ${body.slice(0,300)}`);
   }
 }
-
-/* ------------------- STATUS PEDIDO ------------------- */
-app.patch('/api/orders/:id/status', async (req, res) => {
-  const id = Number(req.params.id);
-  const { status } = req.body || {};
-  const allowed = ['Pedido Novo','Em preparo','Saiu para entrega','Concluido'];
-  if (!allowed.includes(status)) return res.status(400).json({ error: 'Status inválido' });
-  try {
-    const r = await run('UPDATE orders SET status = $1 WHERE id = $2', [status, id]);
-    io.emit('order-status', { id, status });
-    res.json({ ok: true, changes: r.rowCount });
-  } catch {
-    res.status(500).json({ error: 'DB error' });
-  }
-});
 
 /* ------------------- IMPRESSÃO (local-first) ------------------- */
 function padRight(s, n) { s = String(s ?? ''); return s + ' '.repeat(Math.max(0, n - s.length)); }
