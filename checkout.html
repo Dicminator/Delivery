@@ -14,16 +14,8 @@
     .btn:active { transform: scale(0.96); }
     .btn.pop { animation: pop .2s ease; }
 
-    /* iOS faz zoom quando inputs têm fonte <16px */
     input, select, textarea, button { font-size: 16px; }
-
-    /* evita double-tap zoom em botões e remove highlight azul no iOS */
-    .btn, button {
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-      -webkit-user-select: none;
-      user-select: none;
-    }
+    .btn, button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
 
     @keyframes pop { 0%{ transform: scale(1);} 50%{ transform: scale(1.06);} 100%{ transform: scale(1);} }
     .r { animation: ripple .35s ease-out; }
@@ -37,7 +29,7 @@
     .pix-row textarea { flex:1; resize:vertical; }
     .pix-qr { margin-top:.5rem; max-width:220px; height:auto; }
 
-    /* --- Autocomplete do Bairro --- */
+    /* Autocomplete do Bairro */
     .autocomplete { position: relative; }
     .suggestions {
       position:absolute; left:0; right:0; top:100%;
@@ -47,11 +39,10 @@
     .suggestions .item { padding:.5rem .75rem; cursor:pointer; }
     .suggestions .item:hover, .suggestions .item.active { background:#f2f2f2; }
 
-    /* Grupo Entrega/Retirada */
     .mode-group { display:flex; gap:.5rem; margin:.5rem 0; flex-wrap:wrap; }
     .btn[disabled] { opacity:.7; cursor:not-allowed; }
 
-    /* Honeypots invisíveis para capturar autofill */
+    /* Honeypots invisíveis p/ autofill */
     .af-trap {
       position: absolute !important;
       left: -9999px !important;
@@ -61,12 +52,7 @@
       opacity: 0 !important;
       pointer-events: none !important;
     }
-
-    /* Detector de autofill (Chrome/WebKit) */
-    @keyframes autofill-start {}
-    input:-webkit-autofill { animation-name: autofill-start; animation-duration: 0s; }
   </style>
-  <!-- helpers.js define API_BASE, apiFetch, apiFetchJSON, Cart, Nav... -->
   <script src="js/helpers.js?v=2"></script>
 </head>
 <body>
@@ -83,19 +69,14 @@
 
   <div>
     <label for="phone">Telefone</label>
-    <input id="phone" name="phone" type="tel"
-           inputmode="numeric" pattern="\d*"
-           maxlength="11" class="form-control"
-           placeholder="(11) 9XXXX-XXXX">
+    <input id="phone" name="phone" type="tel" inputmode="numeric" pattern="\d*" maxlength="11" class="form-control" placeholder="(11) 9XXXX-XXXX">
   </div>
 
-  <!-- Botões Entrega / Retirada -->
   <div class="mode-group">
     <button id="btnEntrega" class="btn" disabled>Entrega</button>
     <button id="btnRetirada" class="btn">Retirada</button>
   </div>
 
-  <!-- Endereço -->
   <div>
     <label for="address">Endereço</label>
     <div class="grid" style="grid-template-columns:1fr;">
@@ -107,13 +88,12 @@
   <div>
     <label for="zoneInput">Bairro</label>
 
-    <!-- Honeypots que capturam o autofill do navegador -->
+    <!-- Honeypots p/ autofill -->
     <input class="af-trap" type="text" name="street-address"  autocomplete="street-address"  tabindex="-1" aria-hidden="true">
     <input class="af-trap" type="text" name="address-level2"  autocomplete="address-level2"  tabindex="-1" aria-hidden="true">
     <input class="af-trap" type="text" name="postal-code"     autocomplete="postal-code"     tabindex="-1" aria-hidden="true">
 
     <div class="autocomplete">
-      <!-- name “neutro” + autocomplete “new-password” para desarmar heurísticas de autofill -->
       <input
         id="zoneInput"
         name="zone_db"
@@ -121,8 +101,7 @@
         placeholder="Comece a digitar o bairro..."
         autocomplete="new-password"
         autocapitalize="off" autocorrect="off" spellcheck="false"
-        inputmode="search"
-        enterkeyhint="search"
+        inputmode="search" enterkeyhint="search"
       />
       <div id="zoneSuggest" class="suggestions" aria-live="polite"></div>
     </div>
@@ -130,7 +109,6 @@
 
   <div>
     <label>Taxa de Entrega (R$)</label>
-    <!-- SOMENTE SELEÇÃO (não editável) -->
     <input id="delivery_fee" type="number" min="0" step="0.5" value="0.00" readonly />
   </div>
 
@@ -142,7 +120,6 @@
       <option value="Cartão">Cartão</option>
     </select>
 
-    <!-- Seção PIX -->
     <div id="pixBox" class="pix-box">
       <div><strong>PIX copia e cola (com valor):</strong></div>
       <div class="pix-row">
@@ -158,7 +135,6 @@
     <textarea id="notes" placeholder="Observações do pedido"></textarea>
   </div>
 
-  <!-- Rodapé -->
   <div class="footer">
     <div><strong>Total:</strong> R$ <span id="total">0,00</span></div>
     <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
@@ -167,7 +143,7 @@
   </div>
 
 <script>
-/* --------- Fallback caso helpers.js não carregue --------- */
+/* --------- Fallback helpers --------- */
 if (typeof window.apiFetch !== 'function') {
   window.API_BASE = (window.API_BASE || 'https://api.di-fernandes.shop/').replace(/\/?$/, '/');
   window.apiFetch = (path, init = {}) => {
@@ -193,22 +169,16 @@ if (typeof window.apiFetchJSON !== 'function') {
 
 /* ---------- Estado local ---------- */
 let zones = [];
-let selectedZone = null; // {id, name, fee} após seleção no autocomplete
-let deliveryMode = 'Entrega'; // 'Entrega' | 'Retirada'
+let selectedZone = null; // {id, name, fee}
+let deliveryMode = 'Entrega';
 
-/* ---------- UI helpers ---------- */
-function animateBtn(btn){
-  if(!btn) return;
-  btn.classList.add('pop'); btn.classList.add('r');
-  setTimeout(()=>{ btn.classList.remove('pop'); btn.classList.remove('r'); }, 220);
-}
+/* ---------- Helpers ---------- */
+function animateBtn(btn){ if(!btn) return; btn.classList.add('pop','r'); setTimeout(()=>btn.classList.remove('pop','r'), 220); }
 function onlyDigits(v){ return (v || '').replace(/\D+/g, ''); }
 function deaccent(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
-function includesCI(hay, needle){
-  return deaccent(hay).toLowerCase().includes(deaccent(needle).toLowerCase());
-}
+function includesCI(hay, needle){ return deaccent(hay).toLowerCase().includes(deaccent(needle).toLowerCase()); }
 
-/* ---------- Telefone: somente números ---------- */
+/* ---------- Telefone ---------- */
 const phoneEl = document.getElementById('phone');
 phoneEl.addEventListener('input', () => {
   const digits = onlyDigits(phoneEl.value).slice(0, 11);
@@ -229,10 +199,7 @@ const zoneInput   = document.getElementById('zoneInput');
 const suggestBox  = document.getElementById('zoneSuggest');
 const dfEl        = document.getElementById('delivery_fee');
 
-function setDeliveryFee(v){
-  dfEl.value = Number(v||0).toFixed(2);
-  updateTotal();
-}
+function setDeliveryFee(v){ dfEl.value = Number(v||0).toFixed(2); updateTotal(); }
 
 function setMode(mode){
   deliveryMode = mode;
@@ -241,19 +208,16 @@ function setMode(mode){
     btnEntrega.disabled = true;
     btnRetirada.disabled = false;
 
-    // habilita campos
     addressEl.disabled = false;
     zoneInput.disabled = false;
     dfEl.disabled = false;
 
-    // taxa conforme bairro selecionado (ou 0,00)
     const fee = selectedZone ? selectedZone.fee : 0;
     setDeliveryFee(fee);
-  } else { // Retirada
+  } else {
     btnEntrega.disabled = false;
     btnRetirada.disabled = true;
 
-    // desabilita e limpa endereço e bairro
     addressEl.value = '';
     addressEl.disabled = true;
 
@@ -263,13 +227,12 @@ function setMode(mode){
     suggestBox.style.display = 'none';
     suggestBox.innerHTML = '';
 
-    // zera e desabilita taxa
     setDeliveryFee(0);
     dfEl.disabled = true;
   }
 }
 
-/* ---------- Autocomplete de Zonas/Bairros ---------- */
+/* ---------- Autocomplete de Bairros ---------- */
 async function loadZones(){
   try{
     const rows = await apiFetchJSON('/api/delivery-zones');
@@ -292,11 +255,7 @@ function renderSuggestions(list){
   `).join('');
   suggestBox.style.display = 'block';
 }
-
-function closeSuggestions(){
-  suggestBox.style.display = 'none';
-  suggestBox.innerHTML = '';
-}
+function closeSuggestions(){ suggestBox.style.display = 'none'; suggestBox.innerHTML = ''; }
 
 function pickZoneByElement(el){
   const id  = el.getAttribute('data-id');
@@ -312,96 +271,61 @@ function pickZoneByElement(el){
   closeSuggestions();
 }
 
-// eventos do input (digitar / foco / teclado)
 let kbIndex = -1;
-
 zoneInput.addEventListener('input', () => {
   if (zoneInput.disabled) return;
   const q = zoneInput.value.trim();
-  selectedZone = null;     // ao digitar, limpa seleção
-  if (deliveryMode === 'Entrega') setDeliveryFee(0); // taxa volta a 0 até escolher
+  selectedZone = null;
+  if (deliveryMode === 'Entrega') setDeliveryFee(0);
   if (!q){ closeSuggestions(); return; }
   const list = zones.filter(z => includesCI(z.name, q));
   kbIndex = -1;
   renderSuggestions(list);
 });
-
 zoneInput.addEventListener('focus', () => {
   if (zoneInput.disabled) return;
-  if (zoneInput.dataset.autofilled === '1') {
-    zoneInput.value = '';
-    zoneInput.dataset.autofilled = '0';
-  }
   const q = zoneInput.value.trim();
   if (!q){ closeSuggestions(); return; }
   const list = zones.filter(z => includesCI(z.name, q));
   renderSuggestions(list);
 });
-
 zoneInput.addEventListener('keydown', (e) => {
   const items = Array.from(suggestBox.querySelectorAll('.item'));
   if (!items.length) return;
-
   if (e.key === 'ArrowDown'){
-    e.preventDefault();
-    kbIndex = (kbIndex + 1) % items.length;
+    e.preventDefault(); kbIndex = (kbIndex + 1) % items.length;
     items.forEach(i => i.classList.remove('active'));
-    items[kbIndex].classList.add('active');
-    items[kbIndex].scrollIntoView({ block: 'nearest' });
+    items[kbIndex].classList.add('active'); items[kbIndex].scrollIntoView({ block: 'nearest' });
   } else if (e.key === 'ArrowUp'){
-    e.preventDefault();
-    kbIndex = (kbIndex - 1 + items.length) % items.length;
+    e.preventDefault(); kbIndex = (kbIndex - 1 + items.length) % items.length;
     items.forEach(i => i.classList.remove('active'));
-    items[kbIndex].classList.add('active');
-    items[kbIndex].scrollIntoView({ block: 'nearest' });
+    items[kbIndex].classList.add('active'); items[kbIndex].scrollIntoView({ block: 'nearest' });
   } else if (e.key === 'Enter'){
-    if (kbIndex >= 0){
-      e.preventDefault();
-      pickZoneByElement(items[kbIndex]);
-    }
+    if (kbIndex >= 0){ e.preventDefault(); pickZoneByElement(items[kbIndex]); }
   } else if (e.key === 'Escape'){
     closeSuggestions();
   }
 });
+suggestBox.addEventListener('click', (e) => { const el = e.target.closest('.item'); if (el) pickZoneByElement(el); });
+document.addEventListener('click', (e) => { if (!e.target.closest('.autocomplete')) closeSuggestions(); });
 
-// clique no item
-suggestBox.addEventListener('click', (e) => {
-  const el = e.target.closest('.item');
-  if (el) pickZoneByElement(el);
-});
-
-// fecha caixa ao clicar fora
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('.autocomplete')) closeSuggestions();
-});
-
-/* ---------- Guarda contra autofill (Chrome/Safari) ---------- */
-zoneInput.addEventListener('animationstart', (e) => {
-  if (e.animationName === 'autofill-start') {
-    zoneInput.value = '';
-    zoneInput.dataset.autofilled = '1';
-  }
-});
-
-/* ---------- Travar edição manual da taxa (além do disabled em Retirada) ---------- */
+/* ---------- Taxa bloqueada manual ---------- */
 dfEl.addEventListener('keydown', e => e.preventDefault());
 dfEl.addEventListener('wheel', e => { e.preventDefault(); }, { passive:false });
 dfEl.addEventListener('input', e => { e.target.value = Number(e.target.value || 0).toFixed(2); });
 
-/* ---------- Carrinho / Total ---------- */
+/* ---------- Totais ---------- */
 function renderCart(){
   const el = document.getElementById('cart');
   const items = Cart.load();
-  if(items.length===0){
-    el.innerHTML = '<em>Seu carrinho está vazio.</em>';
-  } else {
-    el.innerHTML = items.map(i => (
+  el.innerHTML = items.length===0
+    ? '<em>Seu carrinho está vazio.</em>'
+    : items.map(i => (
       `<div class="line">
         <div>${i.qty}x ${i.name}</div>
         <div>R$ ${(Number(i.price)*Number(i.qty)).toFixed(2)}</div>
       </div>`
     )).join('');
-  }
   updateTotal();
 }
 function getSubtotal(){ return Cart.subtotal(); }
@@ -413,8 +337,7 @@ function updateTotal(){
   const total = getTotal();
   document.getElementById('total').innerText = formatBR(total);
   const pm = document.getElementById('payment_method').value;
-  if (pm === 'Pix') showPix(total);
-  else hidePix();
+  if (pm === 'Pix') showPix(total); else hidePix();
 }
 
 /* ---------- PIX ---------- */
@@ -443,7 +366,6 @@ function hidePix(){
   document.getElementById('pixQr').src = '';
   document.getElementById('pixHint').textContent = '';
 }
-// copiar
 document.getElementById('btnCopyPix').addEventListener('click', async () => {
   const t = document.getElementById('pixPayload').value;
   try { await navigator.clipboard.writeText(t); alert('PIX copia e cola copiado!'); }
@@ -452,11 +374,18 @@ document.getElementById('btnCopyPix').addEventListener('click', async () => {
     document.execCommand('copy'); alert('PIX copiado!');
   }
 });
-// mudar forma de pagamento
 document.getElementById('payment_method').addEventListener('change', (e) => {
-  if (e.target.value === 'Pix') showPix(getTotal());
-  else hidePix();
+  if (e.target.value === 'Pix') showPix(getTotal()); else hidePix();
 });
+
+/* ---------- Endereço c/ bairro (uso único p/ API e Whats) ---------- */
+function getFullAddress(){
+  const addr = (document.getElementById('address').value || '').trim();
+  if (deliveryMode !== 'Entrega') return '';
+  if (!addr) return '';
+  const bairro = selectedZone?.name || '';
+  return bairro ? `${addr} - Bairro: ${bairro}` : addr;
+}
 
 /* ---------- WhatsApp ---------- */
 function buildWhatsMessage(orderId=null){
@@ -466,14 +395,11 @@ function buildWhatsMessage(orderId=null){
   if (orderId) lines.push(`Nº: ${orderId}`);
   lines.push('');
 
-  if (items.length === 0) {
-    lines.push('_Carrinho vazio_');
-  } else {
-    items.forEach(i => {
-      const totalLinha = (Number(i.price)*Number(i.qty)).toFixed(2);
-      lines.push(`${i.qty}x ${i.name} — R$ ${totalLinha}`);
-    });
-  }
+  if (items.length === 0) lines.push('_Carrinho vazio_');
+  else items.forEach(i => {
+    const totalLinha = (Number(i.price)*Number(i.qty)).toFixed(2);
+    lines.push(`${i.qty}x ${i.name} — R$ ${totalLinha}`);
+  });
 
   lines.push('');
   const delivery = getDelivery();
@@ -486,12 +412,14 @@ function buildWhatsMessage(orderId=null){
 
   const name  = document.getElementById('customer_name').value || '';
   const phone = document.getElementById('phone').value || '';
-  const addr  = document.getElementById('address').value || '';
+  const fullAddress = getFullAddress(); // << agora com bairro
+
   const pm    = document.getElementById('payment_method').value || '';
   const notes = document.getElementById('notes').value || '';
+
   if (name)  lines.push(`Cliente: ${name}`);
   if (phone) lines.push(`Telefone: ${phone}`);
-  if (addr)  lines.push(`Endereço: ${addr}`);
+  if (fullAddress)  lines.push(`Endereço: ${fullAddress}`); // << bairro incluído
   if (pm)    lines.push(`Pagamento: ${pm}`);
   if (notes) lines.push(`Obs: ${notes}`);
 
@@ -503,18 +431,6 @@ function openWhats(orderId=null){
   window.open(url, '_blank');
 }
 
-/* ---------- Aux: garantir seleção de bairro a partir do texto digitado ---------- */
-function ensureZoneFromTypedName(){
-  if (selectedZone) return;
-  const typed = (zoneInput.value || '').trim();
-  if (!typed) return;
-  const z = zones.find(x => x.name.toLowerCase() === typed.toLowerCase());
-  if (z){
-    selectedZone = z;
-    if (deliveryMode === 'Entrega') setDeliveryFee(z.fee);
-  }
-}
-
 /* ---------- Enviar pedido ---------- */
 async function finishOrder(btn){
   animateBtn(btn);
@@ -522,48 +438,30 @@ async function finishOrder(btn){
   const items = Cart.load();
   if(items.length===0){ alert('Carrinho vazio'); return; }
 
-  const name = document.getElementById('customer_name').value.trim();
-  const addr = document.getElementById('address').value.trim();
+  const name  = document.getElementById('customer_name').value.trim();
   const phoneDigits = onlyDigits(document.getElementById('phone').value).slice(0,11);
 
-  /* Regras de obrigatoriedade:
-     - Sempre: nome e telefone (mín. 10 dígitos: DDD + número)
-     - Entrega: também endereço e bairro (selecionado da lista ou igual ao cadastro)
-  */
-  if (!name){
-    alert('Informe seu nome.');
-    document.getElementById('customer_name').focus();
-    return;
-  }
-  if (phoneDigits.length < 10){
-    alert('Informe um telefone válido (DDD + número).');
-    phoneEl.focus();
-    return;
+  // Nome e telefone sempre obrigatórios
+  if (!name){ alert('Informe seu nome.'); return; }
+  if (!phoneDigits || phoneDigits.length < 10){ alert('Informe um telefone válido.'); return; }
+
+  // Em Entrega: endereço e bairro obrigatórios
+  if (deliveryMode === 'Entrega') {
+    const addr = (document.getElementById('address').value || '').trim();
+    if (!addr){ alert('Informe o endereço para entrega.'); return; }
+    if (!selectedZone){ alert('Selecione o bairro na lista.'); return; }
   }
 
-  if (deliveryMode === 'Entrega'){
-    if (!addr){
-      alert('Informe seu endereço.');
-      addressEl.focus();
-      return;
-    }
-    // tenta casar o texto digitado com um bairro do banco
-    ensureZoneFromTypedName();
-    if (!selectedZone){
-      alert('Selecione o bairro (use a lista de sugestões).');
-      zoneInput.focus();
-      return;
-    }
-  }
+  // Endereço final (com bairro em Entrega)
+  const fullAddress = getFullAddress();
 
   const body = {
     customer_name: name,
     phone: phoneDigits,
-    address: deliveryMode === 'Entrega' ? addr : '',
+    address: fullAddress,  // << endereço + bairro
     payment_method: document.getElementById('payment_method').value,
     notes: document.getElementById('notes').value,
     delivery_fee: getDelivery(),
-    zone_id: deliveryMode === 'Entrega' ? (selectedZone?.id || null) : null,
     mode: deliveryMode,
     items
   };
@@ -576,7 +474,7 @@ async function finishOrder(btn){
     });
 
     if(data.ok){
-      openWhats(data.order_id);
+      openWhats(data.order_id); // Whats já usa getFullAddress()
       Cart.clear();
       Nav.go('index.html');
     } else {
@@ -589,24 +487,19 @@ async function finishOrder(btn){
 
 /* ---------- Init ---------- */
 document.addEventListener('DOMContentLoaded', async () => {
-  // pagamento padrão = Dinheiro e PIX escondido
   const pmSel = document.getElementById('payment_method');
   pmSel.value = 'Dinheiro';
   hidePix();
 
-  // limpa qualquer valor que o navegador possa ter sugerido no "Bairro"
   zoneInput.value = '';
-  zoneInput.dataset.autofilled = '0';
 
-  // liga os botões de modo
   btnEntrega.addEventListener('click', () => setMode('Entrega'));
   btnRetirada.addEventListener('click', () => setMode('Retirada'));
 
-  // modo padrão: Entrega (habilita endereço/bairro e deixa taxa habilitada)
   setMode('Entrega');
 
   renderCart();
-  await loadZones();   // carrega lista de bairros para o autocomplete
+  await loadZones();
   updateTotal();
 });
 </script>
