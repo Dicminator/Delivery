@@ -376,6 +376,14 @@ async function initDb() {
   console.log('[DB] init ok (PostgreSQL)');
 }
 
+/*--- FORÇA TIMEZONE BR*/
+    const PG_TZ = 'America/Sao_Paulo';
+    pool.on('connect', (client) => {
+      client.query(`SET TIME ZONE '${PG_TZ}'`).catch(e =>
+        console.warn('[DB] falha ao definir TIME ZONE:', e?.message || e)
+      );
+    });
+
 /* ------------------- MIDDLEWARE ------------------- */
 app.use(bodyParser.json());
 app.use(cookieParser());
